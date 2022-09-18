@@ -5,6 +5,7 @@
 
 #include <glm/glm.hpp>
 
+#include <list>
 #include <vector>
 #include <deque>
 #include <random>
@@ -13,6 +14,17 @@
 
 const int32_t init_hp = 30000;
 
+enum BombState : size_t {
+	Inactive = 0,
+	Active = 1
+};
+
+typedef struct Bomb {
+	BombState state = Inactive;
+	Scene::Transform transform;
+	Bomb(Bomb const &) = delete;
+	Bomb() = default;
+} Bomb;
 
 struct PlayMode : Mode {
 	PlayMode();
@@ -59,7 +71,7 @@ struct PlayMode : Mode {
 
 	//bomb_transforms
 	Scene::Transform* bomb_init_transform;
-	std::vector<Scene::Transform*> bomb_transforms;
+	std::list<Bomb> bombs;
 
 	glm::vec3 get_leg_tip_position();
 

@@ -42,11 +42,9 @@ Load< Sound::Sample > dusty_floor_sample(LoadTagDefault, []() -> Sound::Sample c
 });
 
 PlayMode::PlayMode() : scene(*hexapod_scene) {
-	//get pointers to leg for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Bomb") {
 			bomb_init_transform = &transform;
-			bomb_transforms.push_back(&transform);
 		}
 	}
 
@@ -56,12 +54,11 @@ PlayMode::PlayMode() : scene(*hexapod_scene) {
 
 	//add bombs
 	for (int i = 0; i < 10; i++) {
-		scene.transforms.emplace_back();
-		Scene::Transform &transform = scene.transforms.back();
-		transform.name = transform.name + std::to_string(i);
-		reset_bomb_position(transform);
-		bomb_transforms.push_back(&transform);
-		add_drawable(scene, &transform, "Bomb");
+		bombs.emplace_back();
+		Bomb &bomb = bombs.back();
+		bomb.transform.name = bomb_init_transform->name + std::to_string(i);
+		reset_bomb_position(bomb.transform);
+		add_drawable(scene, &bomb.transform, "Bomb");
 	}
 
 	//start music loop playing:
@@ -75,15 +72,15 @@ PlayMode::~PlayMode() {
 void PlayMode::restart_game() {
 	hp = init_hp;
 	score = 0;
-	for (auto bomb_transform: bomb_transforms) {
-		game_status = ACTIVE;
-		reset_bomb_position(*bomb_transform);
+	for (auto &bomb: bombs) {
+		reset_bomb_position(bomb.transform);
 	}
+	game_status = ACTIVE;
 }
 
 void PlayMode::reset_bomb_position(Scene::Transform &bomb_transform) {
 	bomb_transform.position = bomb_init_transform->position;
-	bomb_transform.position[0] = (float) -40 + 80 * ((double) mt()/(double)UINT32_MAX);
+	bomb_transform.position[0] = (float) -40;
 	bomb_transform.position[1] = 100;
 	bomb_transform.position[2] = (float)16 - 40 + 60 * ((double) mt()/(double)UINT32_MAX);
 	bomb_transform.rotation = bomb_init_transform->rotation;
@@ -96,6 +93,7 @@ void PlayMode::bomb_explode(Scene::Transform &bomb_transform, float bomb_distanc
 	// hp -= (int32_t) std::max((double) 0, std::pow(40 - bomb_distance, 3) / 16);
 	hp = std::max(0, hp);
 	reset_bomb_position(bomb_transform);
+	leg_tip_loop = Sound::play_3D(*dusty_floor_sample, 1.0f, get_leg_tip_position(), 10.0f);
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
@@ -176,12 +174,12 @@ void PlayMode::update(float elapsed) {
 		}
 	}
 
-	for (auto bomb_transform: bomb_transforms) {
+	for (Bomb & bomb: bombs) {
 		const static glm::vec4 camera_space_origin = glm::vec4(0, 0, 0, 1);
-		glm::mat4x3 camera_to_bomb = (bomb_transform->make_world_to_local() 
+		glm::mat4x3 camera_to_bomb = (bomb.transform.make_world_to_local() 
 			* glm::mat4(camera->transform->make_local_to_world()));
 		glm::vec3 camera_position_in_bomb_space = camera_to_bomb * camera_space_origin;
-		bomb_transform->position += bomb_speed * glm::normalize(camera_position_in_bomb_space);
+		bomb.transform.position += bomb_speed * glm::normalize(camera_position_in_bomb_space);
 
 		// distance between player (at camera) and bomb
 		float camera_to_bomb_distance = glm::length(camera_position_in_bomb_space);
@@ -191,7 +189,7 @@ void PlayMode::update(float elapsed) {
 			glm::vec3 fire_line_dir = camera_to_bomb * glm::vec4(0, 0, 1, 0);
 			float intersection_indicator = std::pow(glm::dot(camera_position_in_bomb_space, fire_line_dir), 2) - std::pow(glm::length(camera_position_in_bomb_space), 2) + 1;
 			if (intersection_indicator >= 0) {
-				bomb_explode(*bomb_transform, camera_to_bomb_distance);
+				bomb_explode(bomb.transform, camera_to_bomb_distance);
 				score += camera_to_bomb_distance;
 				// as you get higher score, the game gets harder
 				bomb_speed = 0.1f + 0.0001f * score;
@@ -200,7 +198,7 @@ void PlayMode::update(float elapsed) {
 
 		// if bomb hit player
 		if (glm::length(camera_position_in_bomb_space) < 0.5) {
-			bomb_explode(*bomb_transform, camera_to_bomb_distance);
+			bomb_explode(bomb.transform, camera_to_bomb_distance);
 		}
 
 		// if player hp is 0
@@ -282,5 +280,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 glm::vec3 PlayMode::get_leg_tip_position() {
 	//the vertex position here was read from the model in blender:
-	return bomb_transforms[0]->make_local_to_world() * glm::vec4(-1.26137f, -11.861f, 0.0f, 1.0f);
+	
+	return bombs.front().transform.make_local_to_world() * glm::vec4(-1.26137f, -11.861f, 0.0f, 1.0f);
 }
