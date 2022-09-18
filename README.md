@@ -12,4 +12,8 @@ How To Play:
 
 (TODO: describe the controls and (if needed) goals/strategy.)
 
+Attributions:
+
+This game is based on my game2. All the codes copied from game2 are in the commit with tag `game2`.
+
 This game was built with [NEST](NEST.md).
