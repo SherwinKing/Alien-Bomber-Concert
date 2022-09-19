@@ -1,0 +1,3 @@
+[submodule "PySynth"]
+	path = PySynth
+	url = git@github.com:mdoege/PySynth.git
