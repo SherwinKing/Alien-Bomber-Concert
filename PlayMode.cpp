@@ -88,12 +88,12 @@ void PlayMode::reset_bomb_position(Scene::Transform &bomb_transform) {
 	bomb_transform.parent = bomb_init_transform->parent;
 }
 
-void PlayMode::bomb_explode(Scene::Transform &bomb_transform, float bomb_distance) {
+void PlayMode::bomb_explode(Bomb &bomb, float bomb_distance) {
 	hp -= (int32_t) std::max((double) 0, (1000 / std::pow(0.75+bomb_distance/4, 3)));
 	// hp -= (int32_t) std::max((double) 0, std::pow(40 - bomb_distance, 3) / 16);
 	hp = std::max(0, hp);
-	reset_bomb_position(bomb_transform);
 	leg_tip_loop = Sound::play_3D(*dusty_floor_sample, 1.0f, get_leg_tip_position(), 10.0f);
+	reset_bomb_position(bomb.transform);
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
@@ -189,7 +189,7 @@ void PlayMode::update(float elapsed) {
 			glm::vec3 fire_line_dir = camera_to_bomb * glm::vec4(0, 0, 1, 0);
 			float intersection_indicator = std::pow(glm::dot(camera_position_in_bomb_space, fire_line_dir), 2) - std::pow(glm::length(camera_position_in_bomb_space), 2) + 1;
 			if (intersection_indicator >= 0) {
-				bomb_explode(bomb.transform, camera_to_bomb_distance);
+				bomb_explode(bomb, camera_to_bomb_distance);
 				score += camera_to_bomb_distance;
 				// as you get higher score, the game gets harder
 				bomb_speed = 0.1f + 0.0001f * score;
@@ -198,7 +198,7 @@ void PlayMode::update(float elapsed) {
 
 		// if bomb hit player
 		if (glm::length(camera_position_in_bomb_space) < 0.5) {
-			bomb_explode(bomb.transform, camera_to_bomb_distance);
+			bomb_explode(bomb, camera_to_bomb_distance);
 		}
 
 		// if player hp is 0

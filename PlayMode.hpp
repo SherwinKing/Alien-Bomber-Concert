@@ -38,7 +38,7 @@ struct PlayMode : Mode {
 	//other methods
 	void restart_game();
 	void reset_bomb_position(Scene::Transform &transform);
-	void bomb_explode(Scene::Transform &bomb_transform, float bomb_distance);
+	void bomb_explode(Bomb &bomb, float bomb_distance);
 
 
 	//----- game state -----
