@@ -44,9 +44,15 @@ Load< std::vector<Sound::Sample> > sample_vector_ptr_load(LoadTagDefault, []() -
 	return sample_vector_ptr;
 });
 
+
+// Load the bgm sound
+Load<Sound::Sample> bgm_load(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("sounds/out.opus"));
+});
+
 // Load the time sequence of the notes into a vector
-Load< std::vector<NoteInfo> > note_info_vector_ptr_load(LoadTagDefault, []() -> std::vector<NoteInfo> const * {
-	std::vector<NoteInfo> * note_info_vector_ptr = new std::vector<NoteInfo>();
+Load< std::list<NoteInfo> > note_info_list_ptr_load(LoadTagDefault, []() -> std::list<NoteInfo> const * {
+	std::list<NoteInfo> * note_info_list_ptr = new std::list<NoteInfo>();
 	// Similar way of loading assets as game1
 	std::ifstream pitch_time_sequence_file(data_path("/sounds/sequence.txt"));
 	std::string pitch_time_sequence_info;
@@ -58,10 +64,10 @@ Load< std::vector<NoteInfo> > note_info_vector_ptr_load(LoadTagDefault, []() -> 
 		uint32_t asset_id;
 		sound_info_sstream >> pitch_id >> start_time >> asset_id;
 
-		note_info_vector_ptr->push_back({pitch_id, start_time, asset_id});
+		note_info_list_ptr->push_back({pitch_id, start_time, asset_id});
 	}
 
-	return note_info_vector_ptr;
+	return note_info_list_ptr;
 });
 
 PlayMode::PlayMode() : scene(*hexapod_scene) {
@@ -76,7 +82,7 @@ PlayMode::PlayMode() : scene(*hexapod_scene) {
 	camera = &scene.cameras.front();
 
 	//add bombs
-	for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < 50; i++) {
 		bombs.emplace_back();
 		Bomb &bomb = bombs.back();
 		bomb.sound_id = i;
@@ -92,29 +98,65 @@ PlayMode::~PlayMode() {
 void PlayMode::restart_game() {
 	hp = init_hp;
 	score = 0;
+
+	//set note_info_list from Load instance
+	note_info_list = *note_info_list_ptr_load;
+
+	//reset bgm_playing_sample_ptr to nullptr
+	bgm_playing_sample_ptr = nullptr;
+
+	// Clear inactive_bomb_ptrs
+	inactive_bomb_ptrs.clear();
+
+	// Reset bomb status
 	for (auto &bomb: bombs) {
+		bomb.state = Inactive;
+		inactive_bomb_ptrs.push_back(&bomb);
 		reset_bomb_position(bomb.transform);
 	}
 	game_status = ACTIVE;
+	// reset total_time_elapsed
+	total_time_elapsed = 0;
+
+	//reset button press counters:
+	left_click.pressed = false;
+	key_r.downs = 0;
+	left.downs = 0;
+	right.downs = 0;
+	up.downs = 0;
+	down.downs = 0;
 }
 
 void PlayMode::reset_bomb_position(Scene::Transform &bomb_transform) {
 	bomb_transform.position = bomb_init_transform->position;
 	bomb_transform.position[0] = (float) -40;
-	bomb_transform.position[1] = 100;
+	bomb_transform.position[1] = -100;
 	bomb_transform.position[2] = (float)16 - 40 + 60 * ((double) mt()/(double)UINT32_MAX);
 	bomb_transform.rotation = bomb_init_transform->rotation;
 	bomb_transform.scale = bomb_init_transform->scale;
 	bomb_transform.parent = bomb_init_transform->parent;
 }
 
+void PlayMode::activate_bomb_position(Scene::Transform &bomb_transform) {
+	bomb_transform.position = bomb_init_transform->position;
+	bomb_transform.position[0] = - (init_wait_time * bomb_speed);
+	bomb_transform.position[1] = 30;
+	bomb_transform.position[2] = 0;
+	bomb_transform.rotation = bomb_init_transform->rotation;
+	bomb_transform.scale = bomb_init_transform->scale;
+	bomb_transform.parent = bomb_init_transform->parent;
+}
+
 void PlayMode::bomb_explode(Bomb &bomb, float bomb_distance) {
-	hp -= (int32_t) std::max((double) 0, (1000 / std::pow(0.75+bomb_distance/4, 3)));
+	// recollect bomb
+	bomb.state = Inactive;
+	inactive_bomb_ptrs.push_back(&bomb);
+	// hp -= (int32_t) std::max((double) 0, (1000 / std::pow(0.75+bomb_distance/4, 3)));
 	// hp -= (int32_t) std::max((double) 0, std::pow(40 - bomb_distance, 3) / 16);
-	hp = std::max(0, hp);
+	// hp = std::max(0, hp);
 	reset_bomb_position(bomb.transform);
 
-	Sound::play_3D((*sample_vector_ptr_load)[bomb.sound_id], 1.0f, get_leg_tip_position(), 10.0f);
+	Sound::play_3D((*sample_vector_ptr_load)[bomb.sound_id], 4.0f, bomb.transform.position, 10.0f);
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
@@ -195,26 +237,65 @@ void PlayMode::update(float elapsed) {
 		}
 	}
 
+	// update total_time_elapsed
+	total_time_elapsed += elapsed;
+
+	// if bgm not started, check if should start
+	if (bgm_playing_sample_ptr == nullptr && total_time_elapsed > init_wait_time) {
+		bgm_playing_sample_ptr = Sound::play_3D(*bgm_load, 1.0f, glm::vec3(0, 50, 0), 10.0f);
+	}
+
+	if (note_info_list.size() > 0 && inactive_bomb_ptrs.size() > 0) {
+		const NoteInfo & next_note_info = note_info_list.front();
+
+		// activated new bomb if time surpass a new play start time
+		if (total_time_elapsed > next_note_info.start_time) {
+			Bomb* activated_bomb_ptr = inactive_bomb_ptrs.front();
+			activated_bomb_ptr->state = Active;
+			reset_bomb_position(inactive_bomb_ptrs.front()->transform);
+			activate_bomb_position(inactive_bomb_ptrs.front()->transform);
+			inactive_bomb_ptrs.front()->transform.position[2] = -40 + next_note_info.pitch_id;
+			activated_bomb_ptr->sound_id = next_note_info.asset_id;
+			inactive_bomb_ptrs.pop_front();
+
+			note_info_list.pop_front();
+		}
+	}
+
+
 	for (Bomb & bomb: bombs) {
+		// skip inactive bombs
+		if (bomb.state == Inactive)
+			continue;
+
 		const static glm::vec4 camera_space_origin = glm::vec4(0, 0, 0, 1);
 		glm::mat4x3 camera_to_bomb = (bomb.transform.make_world_to_local() 
 			* glm::mat4(camera->transform->make_local_to_world()));
 		glm::vec3 camera_position_in_bomb_space = camera_to_bomb * camera_space_origin;
-		bomb.transform.position += bomb_speed * glm::normalize(camera_position_in_bomb_space);
-
+		// bomb.transform.position += bomb_speed * glm::normalize(camera_position_in_bomb_space);
+		
 		// distance between player (at camera) and bomb
 		float camera_to_bomb_distance = glm::length(camera_position_in_bomb_space);
+		
+		bomb.transform.position += bomb_speed * elapsed * glm::normalize(glm::vec3(1,0,0));
+
 
 		// if player shoot bomb
 		if (left_click.pressed) {
 			glm::vec3 fire_line_dir = camera_to_bomb * glm::vec4(0, 0, 1, 0);
-			float intersection_indicator = std::pow(glm::dot(camera_position_in_bomb_space, fire_line_dir), 2) - std::pow(glm::length(camera_position_in_bomb_space), 2) + 1;
+			float intersection_indicator = std::pow(glm::dot(camera_position_in_bomb_space, fire_line_dir), 2) - std::pow(glm::length(camera_position_in_bomb_space), 2) + 2;
 			if (intersection_indicator >= 0) {
+				uint32_t points_got = (uint32_t) std::pow(std::max(0.0f, 10.0f - std::abs(bomb.transform.position[0])), 2);
+				score += points_got;
 				bomb_explode(bomb, camera_to_bomb_distance);
-				score += camera_to_bomb_distance;
-				// as you get higher score, the game gets harder
-				bomb_speed = 0.1f + 0.0001f * score;
+				//// as you get higher score, the game gets harder
+				// bomb_speed = 0.1f + 0.0001f * score;
 			}
+		}
+
+		// if bomb go cross right boundary
+		if (bomb.transform.position[0] > 10) {
+			bomb_explode(bomb, camera_to_bomb_distance);
 		}
 
 		// if bomb hit player
@@ -234,6 +315,10 @@ void PlayMode::update(float elapsed) {
 		glm::vec3 frame_at = frame[3];
 		Sound::listener.set_position_right(frame_at, frame_right, 1.0f / 60.0f);
 	}
+
+	// press r to set game as STOPPED
+	if (key_r.downs > 0 && game_status == ACTIVE)
+		game_status = STOPPED;
 
 	//reset button press counters:
 	left_click.pressed = false;
@@ -276,7 +361,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		));
 
 		constexpr float H = 0.09f;
-		std::string game_info_string = "Score: " + std::to_string(score)+ ", HP: " + std::to_string(hp);
+		std::string game_info_string = "Score: " + std::to_string(score);
 		lines.draw_text(game_info_string,
 			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
