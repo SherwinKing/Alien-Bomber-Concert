@@ -43,6 +43,25 @@ Load< std::vector<Sound::Sample> > sample_vector_ptr_load(LoadTagDefault, []() -
 	load_sound_assets(sample_vector_ptr);
 	return sample_vector_ptr;
 });
+
+// Load the time sequence of the notes into a vector
+Load< std::vector<NoteInfo> > note_info_vector_ptr_load(LoadTagDefault, []() -> std::vector<NoteInfo> const * {
+	std::vector<NoteInfo> * note_info_vector_ptr = new std::vector<NoteInfo>();
+	// Similar way of loading assets as game1
+	std::ifstream pitch_time_sequence_file(data_path("/sounds/sequence.txt"));
+	std::string pitch_time_sequence_info;
+
+	while (std::getline(pitch_time_sequence_file, pitch_time_sequence_info)) {
+		std::stringstream sound_info_sstream(pitch_time_sequence_info);
+		uint32_t pitch_id;
+		float start_time;
+		uint32_t asset_id;
+		sound_info_sstream >> pitch_id >> start_time >> asset_id;
+
+		note_info_vector_ptr->push_back({pitch_id, start_time, asset_id});
+	}
+
+	return note_info_vector_ptr;
 });
 
 PlayMode::PlayMode() : scene(*hexapod_scene) {
