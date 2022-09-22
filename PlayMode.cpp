@@ -4,7 +4,7 @@
 
 #include "DrawLines.hpp"
 #include "Mesh.hpp"
-#include "Load.hpp"
+
 #include "gl_errors.hpp"
 #include "data_path.hpp"
 
@@ -37,8 +37,12 @@ Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
 	return new Scene(data_path("hexapod.scene"), add_drawable);
 });
 
-Load< Sound::Sample > dusty_floor_sample(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("dusty-floor.opus"));
+// Load the sound assets into one vector
+Load< std::vector<Sound::Sample> > sample_vector_ptr_load(LoadTagDefault, []() -> std::vector<Sound::Sample> const * {
+	std::vector<Sound::Sample> * sample_vector_ptr = new std::vector<Sound::Sample>();
+	load_sound_assets(sample_vector_ptr);
+	return sample_vector_ptr;
+});
 });
 
 PlayMode::PlayMode() : scene(*hexapod_scene) {
@@ -56,16 +60,13 @@ PlayMode::PlayMode() : scene(*hexapod_scene) {
 	for (int i = 0; i < 10; i++) {
 		bombs.emplace_back();
 		Bomb &bomb = bombs.back();
+		bomb.sound_id = i;
 		bomb.transform.name = bomb_init_transform->name + std::to_string(i);
 		reset_bomb_position(bomb.transform);
 		add_drawable(scene, &bomb.transform, "Bomb");
 	}
-
-	//start music loop playing:
-	// (note: position will be over-ridden in update())
-	leg_tip_loop = Sound::loop_3D(*dusty_floor_sample, 1.0f, get_leg_tip_position(), 10.0f);
 }
-
+	
 PlayMode::~PlayMode() {
 }
 
@@ -92,8 +93,9 @@ void PlayMode::bomb_explode(Bomb &bomb, float bomb_distance) {
 	hp -= (int32_t) std::max((double) 0, (1000 / std::pow(0.75+bomb_distance/4, 3)));
 	// hp -= (int32_t) std::max((double) 0, std::pow(40 - bomb_distance, 3) / 16);
 	hp = std::max(0, hp);
-	leg_tip_loop = Sound::play_3D(*dusty_floor_sample, 1.0f, get_leg_tip_position(), 10.0f);
 	reset_bomb_position(bomb.transform);
+
+	Sound::play_3D((*sample_vector_ptr_load)[bomb.sound_id], 1.0f, get_leg_tip_position(), 10.0f);
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {

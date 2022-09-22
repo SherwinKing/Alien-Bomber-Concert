@@ -2,6 +2,8 @@
 
 #include "Scene.hpp"
 #include "Sound.hpp"
+#include "Load.hpp"
+#include "assets.hpp"
 
 #include <glm/glm.hpp>
 
@@ -10,6 +12,8 @@
 #include <deque>
 #include <random>
 #include<cmath>
+#include <fstream>
+#include <sstream>
 
 
 const int32_t init_hp = 30000;
@@ -22,9 +26,16 @@ enum BombState : size_t {
 typedef struct Bomb {
 	BombState state = Inactive;
 	Scene::Transform transform;
+	int16_t sound_id = 0;
 	Bomb(Bomb const &) = delete;
 	Bomb() = default;
 } Bomb;
+
+typedef struct NoteInfo {
+	uint32_t pitch_id;
+	float start_time;
+	uint32_t asset_id;
+} NoteInfo;
 
 struct PlayMode : Mode {
 	PlayMode();
