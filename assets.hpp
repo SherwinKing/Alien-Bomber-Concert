@@ -1,5 +1,7 @@
 #pragma once
 #include <vector>
+#include <array>
+#include <unordered_map>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -10,6 +12,7 @@
 
 
 //----- music assets -----
-extern std::vector<Load<Sound::Sample>> sound_assets;
+extern std::array<Load<Sound::Sample>, 128> sound_assets;
+extern Load< Sound::Sample > dusty_floor_sample;
 
-void load_sound_assets();
+void load_sound_assets(std::vector<Sound::Sample> * sample_vector_ptr);
